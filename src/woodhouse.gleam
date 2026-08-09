@@ -1,0 +1,120 @@
+import gleam/bit_array
+import gleam/bytes_tree.{type BytesTree}
+import gleam/erlang/process.{type Subject}
+import gleam/http
+import gleam/http/request.{type Request}
+import gleam/http/response.{type Response}
+import gleam/httpc
+import gleam/io
+import gleam/option.{type Option, None, Some}
+import gleam/otp/actor
+import gleam/result
+import gleam/uri
+import mist.{type Connection, type ReadError, type ResponseData, Bytes}
+
+pub type ResponseReadError {
+  ResponseReadOutOfBounds
+}
+
+pub type ResponseChunk {
+  ResponseChunk(
+    data: BitArray,
+    consume: fn(Int) -> Result(ResponseChunk, ResponseReadError),
+  )
+  ResponseDone
+}
+
+pub fn read_error_to_string(err: ReadError) -> String {
+  case err {
+    mist.MalformedBody -> "MalformedBody"
+    mist.ExcessBody -> "ExcessBody"
+  }
+}
+
+pub type ChatCommand {
+  ChatCommandNext(String)
+  ChatCommandStop
+}
+
+fn handle_chat_command(state: List(String), msg: ChatCommand) {
+  actor.continue(state)
+}
+
+fn make_chat_actor() -> Result(
+  actor.Started(process.Subject(ChatCommand)),
+  actor.StartError,
+) {
+  actor.new([])
+  |> actor.on_message(handle_chat_command)
+  |> actor.start
+}
+
+pub fn text_error_response(
+  status: Int,
+  content: String,
+) -> Response(ResponseData) {
+  response.new(status)
+  |> response.set_header("Content-Type", "text/plain")
+  |> response.set_body(Bytes(bytes_tree.from_string(content)))
+}
+
+pub fn handler(
+  req: Request(Connection),
+) -> Result(Response(ResponseData), Response(ResponseData)) {
+  use client_body <- result.try(
+    mist.read_body(req, 1024 * 1024 * 4)
+    |> result.map(fn(req) { req.body })
+    |> result.map_error(read_error_to_string)
+    |> result.map_error(fn(err) {
+      text_error_response(400, "Failed to read request body: " <> err)
+    }),
+  )
+
+  use ollama_uri <- result.try(
+    uri.parse("http://localhost:11434/api/chat")
+    |> result.replace_error(text_error_response(
+      500,
+      "failed to create ollama chat uri",
+    )),
+  )
+
+  use ollama_req <- result.try(
+    request.from_uri(ollama_uri)
+    |> result.replace_error(text_error_response(
+      500,
+      "Failed to create ollama chat request",
+    ))
+    |> result.map(request.set_body(_, client_body)),
+  )
+
+  use ollama_res <- result.try(
+    ollama_req
+    |> httpc.send_bits
+    |> result.replace_error(text_error_response(
+      500,
+      "Failed to get ollama chat response",
+    )),
+  )
+
+  use ollama_res_body <- result.try(
+    ollama_res.body
+    |> bit_array.to_string
+    |> result.replace_error(text_error_response(
+      500,
+      "Failed to decode utf-8 from ollama chat response body",
+    )),
+  )
+
+  todo
+}
+
+pub fn main() -> Nil {
+  let a =
+    mist.new(fn(req: Request(Connection)) -> Response(ResponseData) {
+      case handler(req) {
+        Ok(res) -> res
+        Error(res) -> res
+      }
+    })
+  io.println("Hello from woodhouse!")
+}
