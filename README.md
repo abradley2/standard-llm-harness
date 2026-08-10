@@ -1,3 +1,6 @@
+
+[This project is hosted on Codeberg, and mirrored on Github. Please see the main project on Codeberg.](https://codeberg.org/abradley2/standard-llm-harness)
+
 # LLM Harness
 
 A basic sample harness for an LLM

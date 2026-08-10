@@ -16,7 +16,7 @@ pub type Tool {
   ReadFile(read_file.Args)
 }
 
-pub fn capability_decoder() {
+pub fn tool_decoder() {
   let name_decoder = decode.at(["function", "name"], decode.string)
 
   use name <- decode.then(name_decoder)
