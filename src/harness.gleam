@@ -1,3 +1,5 @@
+import chat.{type ChatMessage, type ChatResponse}
+import chat_response
 import gleam/bit_array
 import gleam/bytes_tree.{type BytesTree}
 import gleam/erlang/process.{type Subject}
@@ -11,6 +13,7 @@ import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
 import gleam/result
 import gleam/uri
+import tool
 
 import mist.{type Connection, type ReadError, type ResponseData, Bytes}
 
@@ -44,31 +47,6 @@ pub type State {
 
 pub type GenerateRequest {
   GenerateRequest(name: String)
-}
-
-pub type ChatRole {
-  ChatRoleUser
-  ChatRoleTool
-  ChatRoleAssistant
-}
-
-fn chat_role_to_string(chat_role: ChatRole) -> String {
-  case chat_role {
-    ChatRoleUser -> "user"
-    ChatRoleTool -> "tool"
-    ChatRoleAssistant -> "assistant"
-  }
-}
-
-pub type ChatMessage {
-  ChatMessage(role: ChatRole, content: String)
-}
-
-fn chat_message_to_json(chat_message: ChatMessage) -> json.Json {
-  json.object([
-    #("role", chat_message.role |> chat_role_to_string |> json.string),
-    #("content", chat_message.content |> json.string),
-  ])
 }
 
 fn action(
@@ -133,6 +111,35 @@ pub fn text_error_response(
   |> response.set_body(Bytes(bytes_tree.from_string(content)))
 }
 
+pub fn invoke_ollama_generate(
+  chat_messages: List(ChatMessage),
+) -> Result(String, String) {
+  use ollama_uri <- result.try(
+    uri.parse("http://localhost:11434/api/generate")
+    |> result.replace_error("failed to create ollama chat uri"),
+  )
+
+  use ollama_req <- result.try(
+    request.from_uri(ollama_uri)
+    |> result.replace_error("Failed to create ollama chat request")
+    |> result.map(request.set_body(
+      _,
+      json.object([
+        #("chat", json.array(chat_messages, chat_message_to_json)),
+      ])
+        |> json.to_string,
+    )),
+  )
+
+  use ollama_res <- result.try(
+    ollama_req
+    |> httpc.send
+    |> result.replace_error("Failed to get ollama chat response"),
+  )
+
+  Ok(ollama_res.body)
+}
+
 pub fn invoke_ollama_chat(
   chat_messages: List(ChatMessage),
 ) -> Result(String, String) {
@@ -147,7 +154,7 @@ pub fn invoke_ollama_chat(
     |> result.map(request.set_body(
       _,
       json.object([
-        #("chat", json.array(chat_messages, chat_message_to_json)),
+        #("messages", json.array(chat_messages, chat_message_to_json)),
       ])
         |> json.to_string,
     )),

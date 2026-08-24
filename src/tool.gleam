@@ -16,14 +16,21 @@ pub type Tool {
   ReadFile(read_file.Args)
 }
 
-pub fn tool_decoder() {
+pub fn tool_decoder() -> decode.Decoder(Tool) {
   let name_decoder = decode.at(["function", "name"], decode.string)
 
   use name <- decode.then(name_decoder)
 
   case name {
-    "read_dir" -> read_dir.args_decoder() |> decode.map(ReadDir)
-    "read_file" -> read_file.args_decoder() |> decode.map(ReadFile)
+    "read_dir" ->
+      read_dir.args_decoder() |> for_arguments() |> decode.map(ReadDir)
+    "read_file" ->
+      read_file.args_decoder() |> for_arguments() |> decode.map(ReadFile)
+
     _ -> decode.failure(Invalid, "unknown name: " <> name)
   }
+}
+
+fn for_arguments(decoder: decode.Decoder(a)) -> decode.Decoder(a) {
+  decode.at(["arguments"], decoder)
 }
