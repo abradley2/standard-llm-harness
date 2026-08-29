@@ -83,21 +83,39 @@ fn handle_message(state: State, message: Message) -> actor.Next(State, never) {
               chat.AssistantMessage(next_chat_msg, []),
             ]),
           )
-          |> action(reply_subject, ActionContinue([]))
+          |> command(reply_subject, CommandContinue([]))
         }
       }
     }
-    ChatCommandStop -> actor.stop()
+    MessageStop -> actor.stop()
   }
 }
 
 fn make_chat_actor() -> Result(
-  actor.Started(process.Subject(ChatCommand)),
+  actor.Started(process.Subject(Message)),
   actor.StartError,
 ) {
   actor.new(State([], []))
-  |> actor.on_message(handle_chat_command)
+  |> actor.on_message(handle_message)
   |> actor.start
+}
+
+fn run_chat_actor(chat_actor: actor.Started(process.Subject(Message))) {
+  let command =
+    actor.call(chat_actor.data, 1000 * 30, fn(reply_subject: Subject(Command)) {
+      MessageNext(
+        "Can you tell me the contents of the current directory?",
+        reply_subject,
+      )
+    })
+
+  case command {
+    CommandContinue(tool_requests) -> {
+      todo
+    }
+  }
+
+  todo
 }
 
 pub fn text_error_response(
@@ -123,7 +141,7 @@ pub fn invoke_ollama_generate(
     |> result.map(request.set_body(
       _,
       json.object([
-        #("chat", json.array(chat_messages, chat_message_to_json)),
+        #("chat", json.array(chat_messages, chat.chat_message_to_json)),
       ])
         |> json.to_string,
     )),
@@ -152,7 +170,7 @@ pub fn invoke_ollama_chat(
     |> result.map(request.set_body(
       _,
       json.object([
-        #("messages", json.array(chat_messages, chat_message_to_json)),
+        #("messages", json.array(chat_messages, chat.chat_message_to_json)),
       ])
         |> json.to_string,
     )),
@@ -179,38 +197,11 @@ pub fn handler(
     }),
   )
 
-  use ollama_uri <- result.try(
-    uri.parse("http://localhost:11434/api/chat")
+  use actor <- result.try(
+    make_chat_actor()
     |> result.replace_error(text_error_response(
       500,
-      "failed to create ollama chat uri",
-    )),
-  )
-
-  use ollama_req <- result.try(
-    request.from_uri(ollama_uri)
-    |> result.replace_error(text_error_response(
-      500,
-      "Failed to create ollama chat request",
-    ))
-    |> result.map(request.set_body(_, client_body)),
-  )
-
-  use ollama_res <- result.try(
-    ollama_req
-    |> httpc.send_bits
-    |> result.replace_error(text_error_response(
-      500,
-      "Failed to get ollama chat response",
-    )),
-  )
-
-  use ollama_res_body <- result.try(
-    ollama_res.body
-    |> bit_array.to_string
-    |> result.replace_error(text_error_response(
-      500,
-      "Failed to decode utf-8 from ollama chat response body",
+      "Failed to start chat actor",
     )),
   )
 
