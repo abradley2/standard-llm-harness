@@ -1,5 +1,4 @@
-import chat.{type ChatMessage, type ChatResponse}
-import chat_response
+import chat.{type ChatMessage}
 import gleam/bit_array
 import gleam/bytes_tree.{type BytesTree}
 import gleam/erlang/process.{type Subject}
@@ -13,7 +12,7 @@ import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
 import gleam/result
 import gleam/uri
-import tool
+import tool.{type ToolCall}
 
 import mist.{type Connection, type ReadError, type ResponseData, Bytes}
 
@@ -24,15 +23,15 @@ pub fn read_error_to_string(err: ReadError) -> String {
   }
 }
 
-pub type ChatCommand {
-  ChatCommandNext(String, reply_with: Subject(Action))
-  ChatCommandStop
+pub type Message {
+  MessageNext(String, reply_with: Subject(Command))
+  MessageStop
 }
 
-pub type Action {
-  ActionContinue(requests: List(String))
-  ActionDone(output: String)
-  ActionError(reason: String)
+pub type Command {
+  CommandContinue(requests: List(ToolCall))
+  CommandDone(output: String)
+  CommandError(reason: String)
 }
 
 pub type GenerateRequestState {
@@ -49,26 +48,23 @@ pub type GenerateRequest {
   GenerateRequest(name: String)
 }
 
-fn action(
+fn command(
   state: State,
-  reply_subject: Subject(Action),
-  action: Action,
+  reply_subject: Subject(Command),
+  command: Command,
 ) -> actor.Next(State, never) {
-  process.send(reply_subject, action)
+  process.send(reply_subject, command)
   actor.continue(state)
 }
 
-fn handle_chat_command(
-  state: State,
-  cmd: ChatCommand,
-) -> actor.Next(State, never) {
-  case cmd {
-    ChatCommandNext(msg, reply_subject) -> {
+fn handle_message(state: State, message: Message) -> actor.Next(State, never) {
+  case message {
+    MessageNext(user_message_content, reply_subject) -> {
       let state =
         State(
           ..state,
           chat: list.append(state.chat, [
-            ChatMessage(role: ChatRoleUser, content: msg),
+            chat.UserMessage(content: user_message_content),
           ]),
         )
 
@@ -76,13 +72,15 @@ fn handle_chat_command(
 
       case ollama_response {
         Error(err_response) -> {
-          action(state, reply_subject, ActionError(err_response))
+          command(state, reply_subject, CommandError(err_response))
         }
         Ok(next_chat_msg) -> {
+          // TODO: need to decode this here!
           State(
             ..state,
             chat: list.append(state.chat, [
-              ChatMessage(role: ChatRoleAssistant, content: next_chat_msg),
+              // TODO: I am ommiting tools here which is bad
+              chat.AssistantMessage(next_chat_msg, []),
             ]),
           )
           |> action(reply_subject, ActionContinue([]))

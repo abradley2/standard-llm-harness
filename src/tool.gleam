@@ -10,13 +10,13 @@ pub fn encode_tools() -> json.Json {
   |> json.array(tool_spec.encode_tool_spec)
 }
 
-pub type Tool {
+pub type ToolCall {
   Invalid
   ReadDir(read_dir.Args)
   ReadFile(read_file.Args)
 }
 
-pub fn tool_decoder() -> decode.Decoder(Tool) {
+pub fn tool_decoder() -> decode.Decoder(ToolCall) {
   let name_decoder = decode.at(["function", "name"], decode.string)
 
   use name <- decode.then(name_decoder)
