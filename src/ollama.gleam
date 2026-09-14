@@ -21,14 +21,6 @@ fn chat_message_tool_name(chat_message: ChatMessage) -> Option(String) {
   }
 }
 
-fn chat_message_content(chat_message: ChatMessage) -> String {
-  case chat_message {
-    AssistantMessage(content, _) -> content
-    ToolMessage(content, _) -> content
-    UserMessage(content) -> content
-  }
-}
-
 fn chat_message_role(chat_message: ChatMessage) -> String {
   case chat_message {
     AssistantMessage(_, _) -> "user"
