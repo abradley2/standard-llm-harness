@@ -34,13 +34,6 @@ pub type ChatActorReply {
   ChatActorReplyDone(output: Result(String, String))
 }
 
-pub fn tool_response_to_chat_message(tool_response: ToolResponse) -> ChatMessage {
-  ToolMessage(
-    tool_name: tool_response.tool_name,
-    content: tool_response.json_content,
-  )
-}
-
 pub fn chat_actor_handle_message(
   state: ChatActorState,
   message: ChatActorMessage,
@@ -68,7 +61,10 @@ pub fn chat_actor_handle_message(
                 ..prev_state,
                 messages: prev_state.messages
                   |> list.append([
-                    tool_response_to_chat_message(incoming_tool_response),
+                    ToolMessage(
+                      incoming_tool_response.tool_name,
+                      incoming_tool_response.json_content,
+                    ),
                   ]),
               )
             False ->
