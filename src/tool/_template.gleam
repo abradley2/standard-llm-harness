@@ -3,23 +3,27 @@ import gleam/json
 import tool_spec
 
 pub type Args {
-  Args(id: String)
+  Args(number: Float)
 }
 
 pub fn args_decoder() -> decode.Decoder(Args) {
-  todo
+  use number <- decode.field("number", decode.float)
+
+  decode.success(Args(number: number))
 }
 
 pub fn run(args: Args) -> json.Json {
-  todo
+  let doubled = args.number * 2
+
+  json.float(doubled)
 }
 
 pub fn spec() -> tool_spec.ToolSpec {
   tool_spec.ToolSpec(
-    name: "todo",
-    description: "todo: add description",
+    name: "double",
+    description: "double a number",
     parameters: [
-      #("id", tool_spec.SpecTypeString),
+      #("number", tool_spec.SpecTypeString),
     ],
   )
 }
